@@ -35,37 +35,47 @@ const homePath = getRelativeLocaleUrl(locale, "");
   >
     <section id="hero" class="border-border border-b pt-8 pb-6">
       <h1 class="my-4 inline-block text-4xl font-bold sm:my-8 sm:text-5xl">
-        Mingalaba
+        你好，欢迎 👋
       </h1>
       <a
         target="_blank"
         href={`${import.meta.env.BASE_URL.replace(/\/?$/, "/")}rss.xml`}
         class="inline-block"
-        aria-label="RSS Feed"
-        title="RSS Feed"
+        aria-label="RSS 订阅"
+        title="RSS 订阅"
       >
         <IconRss
           width={20}
           height={20}
           class="stroke-accent scale-125 stroke-3 rtl:-rotate-90"
         />
-        <span class="sr-only">RSS Feed</span>
+        <span class="sr-only">RSS 订阅</span>
       </a>
 
       <p>
-        AstroPaper is a minimal, responsive, accessible and SEO-friendly Astro
-        blog theme. This theme follows best practices and provides accessibility
-        out of the box. Light and dark mode are supported by default. Moreover,
-        additional color schemes can also be configured.
+        技术随笔 · 读书笔记 · 生活记录。基于 Astro + AstroPaper
+        构建的静态个人博客，支持 Markdown、暗色模式、全文搜索。
       </p>
       <p class="mt-2">
-        Read the blog posts or check
+        欢迎浏览
         <LinkButton
           class="hover:text-accent underline decoration-dashed underline-offset-4"
-          href="https://github.com/satnaing/astro-paper#readme"
+          href="/posts/"
         >
-          README
-        </LinkButton> for more info.
+          文章列表
+        </LinkButton>，或者通过
+        <LinkButton
+          class="hover:text-accent underline decoration-dashed underline-offset-4"
+          href="/tags/"
+        >
+          标签
+        </LinkButton>和
+        <LinkButton
+          class="hover:text-accent underline decoration-dashed underline-offset-4"
+          href="/search/"
+        >
+          搜索
+        </LinkButton>来查找内容。
       </p>
       {
         socials.length > 0 && (

@@ -1,37 +1,23 @@
 ---
-title: "About"
-description: "A bit about me and this blog."
+title: "关于"
+description: "关于我和这个博客。"
 ---
 
-AstroPaper is a minimal, accessible and SEO-friendly blog theme built with [Astro](https://astro.build/) and [Tailwind CSS](https://tailwindcss.com/).
+## 关于本站
 
-![Astro Paper](@/assets/images/astropaper-og.jpg)
+这是一个基于 [Astro](https://astro.build/) 和 [AstroPaper](https://github.com/satnaing/astro-paper) 主题构建的静态个人博客，托管在 GitHub Pages 上。
 
-AstroPaper provides a solid foundation for blogs, or even portfolios\_ with full markdown support, built-in dark mode, and a clean layout that works out-of-the-box.
+主要记录技术学习心得、读书笔记和生活随想。
 
-The blog posts in this theme also serve as guides, docs or example articles\_ making AstroPaper a flexible starting point for your next content-driven site.
+## 技术栈
 
-## Features
+- 🚀 **[Astro](https://astro.build/)** — 现代静态站点生成器，岛屿架构
+- 🎨 **[Tailwind CSS](https://tailwindcss.com/)** — 原子化 CSS 框架
+- 🔍 **[PageFind](https://pagefind.app/)** — 静态全文搜索
+- 📝 **Markdown & MDX** — 内容创作格式
+- ☁️ **GitHub Pages** — 免费托管
 
-AstroPaper comes with a set of useful features that make content publishing easy and effective:
+## 联系方式
 
-- SEO-friendly
-- Fast performance
-- Light & dark mode
-- Highly customizable
-- Organizable blog posts
-- Responsive & accessible
-- Static search with [PageFind](https://pagefind.app/)
-- Automatic social image generation
-
-and so much more.
-
-## Show your support
-
-If you like [AstroPaper](https://github.com/satnaing/astro-paper), consider giving it a star ⭐️.
-
-Found a bug 🐛 or have an improvement ✨ in mind? Feel free to open an [issue](https://github.com/satnaing/astro-paper/issues), submit a [pull request](https://github.com/satnaing/astro-paper/pulls) or start a [discussion](https://github.com/satnaing/astro-paper/discussions).
-
-If you find this theme helpful, you can also [sponsor me on GitHub](https://github.com/sponsors/satnaing) or [buy me a coffee](https://buymeacoffee.com/satnaing) to show your support — every penny counts.
-
-Kyay zuu! 🙏🏼
+- GitHub: [amoihans](https://github.com/amoihans)
+- Email: amoyhans@163.com
