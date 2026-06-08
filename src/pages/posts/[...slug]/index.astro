@@ -103,75 +103,74 @@ const ogImage = ogImageUrl
   pubDatetime={pubDatetime}
   modDatetime={modDatetime}
 >
-  <Header />
+  <div id="post-page" class="mx-auto w-full max-w-6xl px-4">
+    <Header />
 
-  <BackButton />
+    <BackButton />
 
-  <main
-    id="main-content"
-    class:list={[
-      "mx-auto w-full max-w-6xl px-4",
-      { "mt-8": !config.features.showBackButton },
-    ]}
-    data-pagefind-body
-  >
-    <div class="flex gap-8 xl:gap-12">
-      <!-- Article column -->
-      <div class="min-w-0 flex-1">
-        <h1
-          style={{ viewTransitionName: toTransitionName(title) }}
-          class="text-accent inline-block text-2xl font-bold sm:text-3xl"
-        >
-          {title}
-        </h1>
+    <main
+      id="main-content"
+      class:list={[{ "mt-8": !config.features.showBackButton }]}
+      data-pagefind-body
+    >
+      <div class="flex gap-8 xl:gap-12">
+        <!-- Article column -->
+        <div class="min-w-0 flex-1">
+          <h1
+            style={{ viewTransitionName: toTransitionName(title) }}
+            class="text-accent inline-block text-2xl font-bold sm:text-3xl"
+          >
+            {title}
+          </h1>
 
-        <div class="my-2 flex items-center gap-2">
-          <Datetime {pubDatetime} {modDatetime} {timezone} size="lg" />
-          <span
-            aria-hidden="true"
+          <div class="my-2 flex items-center gap-2">
+            <Datetime {pubDatetime} {modDatetime} {timezone} size="lg" />
+            <span
+              aria-hidden="true"
+              class:list={[
+                "text-muted-foreground max-sm:hidden",
+                { hidden: !config.features.editPost?.enabled || hideEditPost },
+              ]}
+            >
+              |
+            </span>
+            <EditPost {hideEditPost} {post} class="max-sm:hidden" />
+          </div>
+
+          <article
+            id="article"
             class:list={[
-              "text-muted-foreground max-sm:hidden",
-              { hidden: !config.features.editPost?.enabled || hideEditPost },
+              "mt-8 w-full",
+              "app-prose",
+              "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
             ]}
           >
-            |
-          </span>
-          <EditPost {hideEditPost} {post} class="max-sm:hidden" />
+            <Content />
+          </article>
+
+          <hr class="my-8 border-dashed" />
+
+          <EditPost class="sm:hidden" {hideEditPost} {post} />
+
+          <BackToTopButton />
+
+          <ul class="mt-4 mb-8 flex flex-wrap gap-4 sm:my-8">
+            {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />)}
+          </ul>
+
+          <ShareLinks />
+
+          <hr class="my-8 border-dashed" />
+
+          <AdjacentPostNav {prevPost} {nextPost} />
         </div>
 
-        <article
-          id="article"
-          class:list={[
-            "mt-8 w-full",
-            "app-prose",
-            "prose-pre:bg-(--shiki-light-bg) dark:prose-pre:bg-(--shiki-dark-bg)",
-          ]}
-        >
-          <Content />
-        </article>
-
-        <hr class="my-8 border-dashed" />
-
-        <EditPost class="sm:hidden" {hideEditPost} {post} />
-
-        <BackToTopButton />
-
-        <ul class="mt-4 mb-8 flex flex-wrap gap-4 sm:my-8">
-          {tags.map(tag => <Tag tag={slugifyStr(tag)} tagName={tag} size="sm" />)}
-        </ul>
-
-        <ShareLinks />
-
-        <hr class="my-8 border-dashed" />
-
-        <AdjacentPostNav {prevPost} {nextPost} />
+        <!-- TOC sidebar -->
+        <TableOfContents />
       </div>
-
-      <!-- TOC sidebar -->
-      <TableOfContents />
-    </div>
-  </main>
-  <Footer />
+    </main>
+    <Footer />
+  </div>
 </PostLayout>
 
 <script is:inline data-astro-rerun>
@@ -542,3 +541,19 @@ const ogImage = ogImageUrl
     window.scrollTo({ left: 0, top: 0, behavior: "instant" })
   );
 </script>
+
+<style is:global>
+  /* On post detail pages, make header/footer/back-button match the wider
+     6xl content width instead of the default app-layout (3xl). */
+  #post-page .app-layout {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  /* Restore horizontal padding for the actual nav header row so items
+     still align with the article content. */
+  #post-page header .border-border {
+    padding-left: 0;
+    padding-right: 0;
+  }
+</style>

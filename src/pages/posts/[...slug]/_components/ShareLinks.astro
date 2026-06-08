@@ -8,7 +8,7 @@ const t = useTranslations(Astro.currentLocale);
 
 const icons = import.meta.glob<{
   default: (_props: Record<string, unknown>) => unknown;
-}>("/src/assets/icons/socials/*.svg");
+}>("../../../../assets/icons/socials/*.svg");
 
 const pageUrl = Astro.url;
 
@@ -17,7 +17,7 @@ const platformLabel = (name: string) =>
 
 const items = await Promise.all(
   shareLinks.map(async ({ name, url, linkTitle }) => {
-    const mod = await icons[`/src/assets/icons/socials/${name}.svg`]?.();
+    const mod = await icons[`../../../../assets/icons/socials/${name}.svg`]?.();
     const Icon = mod?.default;
     const title =
       linkTitle ??
