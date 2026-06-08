@@ -1,7 +1,7 @@
 ---
 author: Hans
-pubDatetime: 2026-06-08T10:30:00Z
-modDatetime: 2026-06-08T10:30:00Z
+pubDatetime: 2026-06-08T00:00:00+08:00
+modDatetime: 2026-06-08T00:00:00+08:00
 title: 静态博客方案调研报告——为什么我选择了 Astro
 slug: static-blog-generator-research
 featured: true
