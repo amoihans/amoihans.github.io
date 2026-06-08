@@ -1,0 +1,36 @@
+---
+import { getEntry, render } from "astro:content";
+import Layout from "@/layouts/Layout.astro";
+import Header from "@/components/Header.astro";
+import Breadcrumb from "@/components/Breadcrumb.astro";
+import Main from "@/components/Main.astro";
+import Footer from "@/components/Footer.astro";
+import config from "@/config";
+
+const games = await getEntry("pages", "games");
+
+if (!games) {
+  throw new Error(
+    "Missing content entry: `games.md` or `games.mdx` in `src/content/pages/`"
+  );
+}
+
+const { Content } = await render(games);
+---
+
+<Layout
+  title={`${games.data.title} | ${config.site.title}`}
+  description={games.data.description}
+  ogImage={games.data.ogImage}
+  canonicalURL={games.data.canonicalURL}
+>
+  <Header />
+
+  <Breadcrumb />
+
+  <Main pageTitle={games.data.title} class="app-prose">
+    <Content />
+  </Main>
+
+  <Footer />
+</Layout>
