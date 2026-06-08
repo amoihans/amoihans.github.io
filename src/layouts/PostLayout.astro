@@ -64,3 +64,49 @@ const structuredData = {
 
   <slot />
 </Layout>
+
+<script is:inline>
+  // Mermaid diagram client-side rendering
+  async function renderMermaidDiagrams() {
+    const mermaidPres = document.querySelectorAll(
+      'pre[data-language="mermaid"]'
+    );
+    if (mermaidPres.length === 0) return;
+
+    try {
+      const mermaid = await import(
+        "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
+      );
+      mermaid.default.initialize({
+        startOnLoad: false,
+        theme:
+          document.documentElement.dataset.theme === "dark"
+            ? "dark"
+            : "default",
+        securityLevel: "loose",
+      });
+
+      for (const pre of mermaidPres) {
+        const code = pre.querySelector("code");
+        if (!code) continue;
+        const graphDefinition = code.textContent || "";
+        const id = "mermaid-" + Math.random().toString(36).slice(2, 8);
+        try {
+          const { svg } = await mermaid.default.render(id, graphDefinition);
+          const container = document.createElement("div");
+          container.className =
+            "mermaid-container my-6 flex justify-center overflow-x-auto";
+          container.innerHTML = svg;
+          pre.replaceWith(container);
+        } catch (err) {
+          console.warn("Mermaid render failed for diagram:", err);
+        }
+      }
+    } catch (err) {
+      console.warn("Mermaid CDN load failed:", err);
+    }
+  }
+
+  renderMermaidDiagrams();
+  document.addEventListener("astro:after-swap", renderMermaidDiagrams);
+</script>
