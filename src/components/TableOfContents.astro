@@ -1,0 +1,104 @@
+<!--
+  Sidebar Table of Contents — sticky on desktop, hidden on mobile.
+  Injected and populated by client-side JS after page load.
+-->
+<aside
+  id="toc-sidebar"
+  class="toc-sidebar hidden w-56 shrink-0 xl:block"
+  aria-label="目录导航"
+>
+  <nav
+    id="toc-nav"
+    class="sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto"
+  >
+    <h2 class="mb-3 text-sm font-semibold tracking-wide text-foreground/70">
+      目录
+    </h2>
+    <ul id="toc-list" class="space-y-1 text-sm leading-relaxed"></ul>
+  </nav>
+</aside>
+
+<script is:inline>
+  function buildTOC() {
+    var article = document.querySelector("#article");
+    var tocList = document.querySelector("#toc-list");
+    var tocSidebar = document.querySelector("#toc-sidebar");
+    if (!article || !tocList || !tocSidebar) return;
+
+    var headings = article.querySelectorAll("h2, h3");
+    if (headings.length < 2) {
+      tocSidebar.classList.add("hidden");
+      return;
+    }
+
+    tocSidebar.classList.remove("hidden");
+
+    // Build list from headings
+    var html = "";
+    headings.forEach(function (heading) {
+      var level = Number(heading.tagName.charAt(1));
+      var text = heading.textContent || "";
+      var id = heading.id;
+      html += '<li>' +
+        '<a href="#' + id + '" data-toc-link data-toc-target="' + id + '"' +
+        ' class="block rounded px-2 py-1 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-accent' +
+        (level === 3 ? ' ml-3 text-xs' : '') + '">' +
+        text +
+        '</a>' +
+        '</li>';
+    });
+
+    tocList.innerHTML = html;
+
+    // Scroll spy — highlight current heading
+    var links = tocList.querySelectorAll("[data-toc-link]");
+    var observer = new IntersectionObserver(
+      function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          var link = tocList.querySelector(
+            '[data-toc-target="' + entry.target.id + '"]'
+          );
+          if (entry.isIntersecting && link) {
+            for (var j = 0; j < links.length; j++) {
+              links[j].classList.remove(
+                "!text-accent",
+                "font-medium",
+                "border-l-2",
+                "border-accent",
+                "pl-[7px]"
+              );
+            }
+            link.classList.add(
+              "!text-accent",
+              "font-medium",
+              "border-l-2",
+              "border-accent",
+              "pl-[7px]"
+            );
+            link.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        }
+      },
+      { rootMargin: "-80px 0px -70% 0px" }
+    );
+
+    headings.forEach(function (h) { observer.observe(h); });
+
+    // Click to smooth scroll to heading
+    tocList.addEventListener("click", function (e) {
+      var link = e.target.closest("[data-toc-link]");
+      if (!link) return;
+      e.preventDefault();
+      var id = link.getAttribute("data-toc-target");
+      if (id) {
+        var target = document.getElementById(id);
+        if (target) target.scrollIntoView({ behavior: "smooth" });
+        history.replaceState(null, "", "#" + id);
+      }
+    });
+  }
+
+  buildTOC();
+  document.addEventListener("astro:after-swap", buildTOC);
+</script>

@@ -8,7 +8,7 @@ const t = useTranslations(Astro.currentLocale);
 
 const icons = import.meta.glob<{
   default: (_props: Record<string, unknown>) => unknown;
-}>("../../../../assets/icons/socials/*.svg");
+}>("/src/assets/icons/socials/*.svg");
 
 const pageUrl = Astro.url;
 
