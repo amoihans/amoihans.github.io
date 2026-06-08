@@ -77,13 +77,206 @@ const structuredData = {
       const mermaid = await import(
         "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
       );
+      const isDark =
+        document.documentElement.dataset.theme === "dark";
+
       mermaid.default.initialize({
         startOnLoad: false,
-        theme:
-          document.documentElement.dataset.theme === "dark"
-            ? "dark"
-            : "default",
+        theme: "base",
         securityLevel: "loose",
+        fontFamily:
+          '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, -apple-system, sans-serif',
+        themeVariables: isDark
+          ? {
+              // ── Dark mode ──────────────────────────────
+              background: "#0f172a",
+              primaryColor: "#4f46e5",
+              primaryTextColor: "#e0e7ff",
+              primaryBorderColor: "#818cf8",
+              lineColor: "#475569",
+              secondaryColor: "#1e293b",
+              secondaryTextColor: "#cbd5e1",
+              secondaryBorderColor: "#334155",
+              tertiaryColor: "#0f1f1a",
+              tertiaryTextColor: "#a7f3d0",
+              tertiaryBorderColor: "#065f46",
+              // Node styling
+              mainBkg: "#0f172a",
+              nodeBorder: "#475569",
+              nodeTextColor: "#e2e8f0",
+              // Edge / label
+              edgeLabelBackground: "#1e293b",
+              labelTextColor: "#94a3b8",
+              labelBackground: "#1e293b",
+              // Cluster (subgraph)
+              clusterBkg: "#1e293b",
+              clusterBorder: "#334155",
+              // Title
+              titleColor: "#e2e8f0",
+              // Flowchart specific
+              nodePadding: "10",
+              // Sequence diagram
+              actorBkg: "#4f46e5",
+              actorBorder: "#818cf8",
+              actorTextColor: "#e0e7ff",
+              actorLineColor: "#64748b",
+              signalColor: "#94a3b8",
+              signalTextColor: "#e2e8f0",
+              labelBoxBkgColor: "#1e293b",
+              labelBoxBorderColor: "#334155",
+              loopTextColor: "#e2e8f0",
+              noteBkgColor: "#312e81",
+              noteBorderColor: "#6366f1",
+              noteTextColor: "#c7d2fe",
+              // State diagram
+              labelColor: "#e2e8f0",
+              altBackground: "#1e293b",
+              // ER / class diagram
+              classText: "#e2e8f0",
+              fillType0: "#4f46e5",
+              fillType1: "#0891b2",
+              fillType2: "#7c3aed",
+              fillType3: "#059669",
+              fillType4: "#d97706",
+              fillType5: "#dc2626",
+              fillType6: "#2563eb",
+              fillType7: "#9333ea",
+              // Gantt
+              sectionBkgColor: "#1e293b",
+              altSectionBkgColor: "#0f172a",
+              sectionBkgColor2: "#1e293b",
+              taskBkgColor: "#4f46e5",
+              taskBorderColor: "#818cf8",
+              taskTextColor: "#e0e7ff",
+              taskTextOutsideColor: "#cbd5e1",
+              gridColor: "#334155",
+              todayLineColor: "#f59e0b",
+              // Pie
+              pie1: "#4f46e5",
+              pie2: "#0891b2",
+              pie3: "#7c3aed",
+              pie4: "#059669",
+              pie5: "#d97706",
+              pie6: "#dc2626",
+              pie7: "#2563eb",
+              pie8: "#9333ea",
+              pieTitleTextColor: "#e2e8f0",
+              pieSectionTextColor: "#cbd5e1",
+              pieLegendTextColor: "#cbd5e1",
+              pieStrokeColor: "#0f172a",
+            }
+          : {
+              // ── Light mode ─────────────────────────────
+              background: "#ffffff",
+              primaryColor: "#4f46e5",
+              primaryTextColor: "#ffffff",
+              primaryBorderColor: "#6366f1",
+              lineColor: "#94a3b8",
+              secondaryColor: "#f8fafc",
+              secondaryTextColor: "#334155",
+              secondaryBorderColor: "#cbd5e1",
+              tertiaryColor: "#f0fdf4",
+              tertiaryTextColor: "#065f46",
+              tertiaryBorderColor: "#6ee7b7",
+              // Node styling
+              mainBkg: "#ffffff",
+              nodeBorder: "#cbd5e1",
+              nodeTextColor: "#1e293b",
+              // Edge / label
+              edgeLabelBackground: "#ffffff",
+              labelTextColor: "#64748b",
+              labelBackground: "#f1f5f9",
+              // Cluster (subgraph)
+              clusterBkg: "#f8fafc",
+              clusterBorder: "#e2e8f0",
+              // Title
+              titleColor: "#1e293b",
+              // Flowchart specific
+              nodePadding: "10",
+              // Sequence diagram
+              actorBkg: "#4f46e5",
+              actorBorder: "#6366f1",
+              actorTextColor: "#ffffff",
+              actorLineColor: "#94a3b8",
+              signalColor: "#475569",
+              signalTextColor: "#1e293b",
+              labelBoxBkgColor: "#f8fafc",
+              labelBoxBorderColor: "#e2e8f0",
+              loopTextColor: "#1e293b",
+              noteBkgColor: "#eef2ff",
+              noteBorderColor: "#6366f1",
+              noteTextColor: "#3730a3",
+              // State diagram
+              labelColor: "#1e293b",
+              altBackground: "#f8fafc",
+              // ER / class diagram
+              classText: "#1e293b",
+              fillType0: "#4f46e5",
+              fillType1: "#0891b2",
+              fillType2: "#7c3aed",
+              fillType3: "#059669",
+              fillType4: "#d97706",
+              fillType5: "#dc2626",
+              fillType6: "#2563eb",
+              fillType7: "#9333ea",
+              // Gantt
+              sectionBkgColor: "#f8fafc",
+              altSectionBkgColor: "#ffffff",
+              sectionBkgColor2: "#f8fafc",
+              taskBkgColor: "#4f46e5",
+              taskBorderColor: "#6366f1",
+              taskTextColor: "#ffffff",
+              taskTextOutsideColor: "#475569",
+              gridColor: "#e2e8f0",
+              todayLineColor: "#dc2626",
+              // Pie
+              pie1: "#4f46e5",
+              pie2: "#0891b2",
+              pie3: "#7c3aed",
+              pie4: "#059669",
+              pie5: "#d97706",
+              pie6: "#dc2626",
+              pie7: "#2563eb",
+              pie8: "#9333ea",
+              pieTitleTextColor: "#1e293b",
+              pieSectionTextColor: "#475569",
+              pieLegendTextColor: "#475569",
+              pieStrokeColor: "#ffffff",
+            },
+        themeCSS: `
+          /* ── border radius ── */
+          .node rect, .node circle, .node ellipse, .node polygon,
+          .cluster rect, .label foreignObject, .edgeLabel foreignObject {
+            rx: 8px !important;
+            ry: 8px !important;
+          }
+          /* ── thinner lines ── */
+          .edgePath .path, .flowchart-link, .messageLine0, .messageLine1 {
+            stroke-width: 1.5px !important;
+          }
+          .node rect, .node circle, .node ellipse, .node polygon {
+            stroke-width: 1.5px !important;
+          }
+          /* ── subtle shadow on nodes ── */
+          .node rect {
+            filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.06));
+          }
+          /* ── cluster / subgraph styling ── */
+          .cluster rect {
+            stroke-dasharray: 6 3;
+            stroke-width: 1px !important;
+          }
+          /* ── edge labels ── */
+          .edgeLabel span {
+            font-size: 12px;
+            letter-spacing: 0.01em;
+          }
+          /* ── sequence diagram actors ── */
+          .actor {
+            rx: 6px !important;
+            ry: 6px !important;
+          }
+        `,
       });
 
       for (const pre of mermaidPres) {
@@ -95,7 +288,7 @@ const structuredData = {
           const { svg } = await mermaid.default.render(id, graphDefinition);
           const container = document.createElement("div");
           container.className =
-            "mermaid-container my-6 flex justify-center overflow-x-auto";
+            "mermaid-container my-8 flex justify-center overflow-x-auto rounded-2xl border border-border/50 bg-card p-4 shadow-sm";
           container.innerHTML = svg;
           pre.replaceWith(container);
         } catch (err) {
