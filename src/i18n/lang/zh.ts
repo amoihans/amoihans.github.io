@@ -59,6 +59,8 @@ export default {
     openMenu: "打开菜单",
     closeMenu: "关闭菜单",
     toggleTheme: "切换主题",
+    showKanban: "显示看板娘",
+    hideKanban: "隐藏看板娘",
     searchPlaceholder: "搜索文章...",
     noResults: "没有找到结果",
     goToPreviousPage: "前往上一页",

@@ -87,6 +87,11 @@ export const Live2DKanban = forwardRef<Live2DKanbanHandle, Live2DKanbanProps>(
     );
     const coreModelRef = useRef<unknown>(null);
     const hiddenByUserRef = useRef<boolean>(false);
+    // 模型加载完测量到的真实视觉尺寸，resize PIXI canvas 和容器到刚好包住模型。
+    const [visualSize, setVisualSize] = useState<{ w: number; h: number }>({
+      w: width,
+      h: height,
+    });
 
     // 读取 localStorage 中的「用户隐藏」状态
     useEffect(() => {
@@ -135,14 +140,25 @@ export const Live2DKanban = forwardRef<Live2DKanbanHandle, Live2DKanbanProps>(
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [pos, setPos] = useState<{ x: number; y: number }>(() => {
       if (typeof window === "undefined") return { x: 0, y: 0 };
-      const x = anchor.includes("right")
-        ? window.innerWidth - width - 24
-        : 24;
-      const y = anchor.includes("bottom")
-        ? window.innerHeight - height - 24
-        : 24;
+      // 初始 pos 按默认 width/height 算；模型加载完 resize 后 useEffect 会重算
+      const w = visualSize.w;
+      const h = visualSize.h;
+      const x = anchor.includes("right") ? window.innerWidth - w - 24 : 24;
+      const y = anchor.includes("bottom") ? window.innerHeight - h - 24 : 24;
       return { x, y };
     });
+
+    // 模型加载完拿到视觉尺寸后，重新计算 pos 让看板娘贴在 bottom-right
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      const x = anchor.includes("right")
+        ? window.innerWidth - visualSize.w - 24
+        : 24;
+      const y = anchor.includes("bottom")
+        ? window.innerHeight - visualSize.h - 24
+        : 24;
+      setPos({ x, y });
+    }, [visualSize.w, visualSize.h, anchor]);
 
     // 命令式 API
     useImperativeHandle(
@@ -216,25 +232,15 @@ export const Live2DKanban = forwardRef<Live2DKanbanHandle, Live2DKanbanProps>(
           }
           modelRef.current = model;
 
-          const internal = model.internalModel as {
-            originalWidth?: number;
-            originalHeight?: number;
-            coreModel?: unknown;
-          };
-          let naturalW: number =
-            internal.originalWidth || (model as unknown as { width?: number }).width || 0;
-          let naturalH: number =
-            internal.originalHeight ||
-            (model as unknown as { height?: number }).height ||
-            0;
-          if (!naturalW || !naturalH) {
-            naturalW = naturalW || 2048;
-            naturalH = naturalH || 2048;
-          }
+          // 用 getLocalBounds() 拿模型内容真实尺寸（不包含原画布里的空白区，
+          // 比如 Hiyori 的 2048×2048 里只在下半部分有角色）。
+          const localBounds = model.getLocalBounds();
+          const contentW = Math.max(1, localBounds.width);
+          const contentH = Math.max(1, localBounds.height);
           const margin = Math.max(0.01, Math.min(1, fitMargin));
           const fitScale = Math.min(
-            (width * margin) / naturalW,
-            (height * margin) / naturalH
+            (width * margin) / contentW,
+            (height * margin) / contentH
           );
           const finalScale = fitScale * legacyScale;
           model.anchor.set(0.5, 0.5);
@@ -242,13 +248,32 @@ export const Live2DKanban = forwardRef<Live2DKanbanHandle, Live2DKanbanProps>(
           model.scale.set(finalScale);
 
           app.stage.addChild(model);
+
+          // 缩放后用 getBounds() 拿视觉尺寸，把 PIXI canvas 和外层容器
+          // resize 到刚好包住模型，避免空白区域。
+          // getBounds() 内部已经处理 transform 更新；不需要再手动 updateTransform。
+          let visualW = width;
+          let visualH = height;
+          try {
+            const worldBounds = model.getBounds();
+            if (worldBounds.width > 0 && worldBounds.height > 0) {
+              visualW = Math.ceil(worldBounds.width);
+              visualH = Math.ceil(worldBounds.height);
+              app.renderer.resize(visualW, visualH);
+              // 重新居中到新 canvas
+              model.position.set(visualW / 2, visualH / 2);
+            }
+          } catch (err) {
+            console.error("[Live2D] resize failed:", err);
+          }
+          setVisualSize({ w: visualW, h: visualH });
           app.stage.eventMode = "static";
-          app.stage.hitArea = new PIXI.Rectangle(0, 0, width, height);
+          app.stage.hitArea = new PIXI.Rectangle(0, 0, visualW, visualH);
 
           // 鼠标跟踪
-          const coreModel = internal.coreModel as {
-            setParameterValueById: (id: string, value: number) => void;
-          };
+          const coreModel = (
+            model.internalModel as { coreModel?: { setParameterValueById: (id: string, value: number) => void } }
+          ).coreModel;
           coreModelRef.current = coreModel;
 
           const applyFollow = (nx: number, ny: number) => {
@@ -415,6 +440,23 @@ export const Live2DKanban = forwardRef<Live2DKanbanHandle, Live2DKanbanProps>(
       if (hiddenByUserRef.current) setVisible(false);
     }, []);
 
+    // 监听 Header 看板娘开关（或其他地方）派发的 visibility 变化事件，
+    // 保持 localStorage ↔ 内部 visible state ↔ 用户点 -/+ 按钮 三方同步
+    useEffect(() => {
+      if (!hiddenStorageKey) return;
+      const handler = () => {
+        try {
+          const hidden = localStorage.getItem(hiddenStorageKey) === "1";
+          hiddenByUserRef.current = hidden;
+          setVisible(!hidden);
+        } catch {
+          /* ignore */
+        }
+      };
+      window.addEventListener("kanban:visibility-changed", handler);
+      return () => window.removeEventListener("kanban:visibility-changed", handler);
+    }, [hiddenStorageKey]);
+
     if (!shouldRender) return null;
 
     return (
@@ -424,8 +466,8 @@ export const Live2DKanban = forwardRef<Live2DKanbanHandle, Live2DKanbanProps>(
           position: "fixed",
           left: pos.x,
           top: pos.y,
-          width,
-          height,
+          width: visualSize.w,
+          height: visualSize.h,
           zIndex: 9999,
           cursor: draggable ? "grab" : "default",
           display: visible ? "block" : "none",

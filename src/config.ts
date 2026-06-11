@@ -37,8 +37,8 @@ const config: ResolvedAstroPaperConfig = {
     kanban: userConfig.features?.kanban ?? {
       enabled: true,
       modelPath: "/models/Hiyori/Hiyori.model3.json",
-      width: 420,
-      height: 600,
+      width: 240,
+      height: 360,
       scale: 1,
       idleRandomAfterMs: 8000,
       followStrength: 1,

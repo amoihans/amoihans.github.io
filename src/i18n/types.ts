@@ -57,6 +57,8 @@ export interface UIStrings {
     openMenu: string;
     closeMenu: string;
     toggleTheme: string;
+    showKanban: string;
+    hideKanban: string;
     searchPlaceholder: string;
     noResults: string;
     goToPreviousPage: string;
