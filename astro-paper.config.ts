@@ -27,6 +27,17 @@ export default defineAstroPaperConfig({
       url: "https://github.com/amoihans/amoihans.github.io/edit/main/",
     },
     search: "pagefind",
+    kanban: {
+      enabled: true,
+      modelPath: "/models/Hiyori/Hiyori.model3.json",
+      width: 420,
+      height: 600,
+      scale: 1,
+      idleRandomAfterMs: 8000,
+      followStrength: 1,
+      draggable: true,
+      hiddenStorageKey: "kanban:hidden",
+    },
   },
   socials: [
     { name: "github", url: "https://github.com/amoihans" },

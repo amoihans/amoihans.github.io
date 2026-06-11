@@ -1,0 +1,38 @@
+---
+/**
+ * 看板娘包装：把 React 版 <Live2DKanban> 嵌进 Astro 页面。
+ *
+ * 关键点：
+ * - `client:only="react"` —— 组件用了 window / PIXI / WASM，必须只在浏览器跑。
+ * - `transition:persist` —— 让 Astro view transitions 跨页不卸载，
+ *   否则每次跳转都会重新下载 4.8MB 模型，闪烁明显。
+ * - 用 getAssetPath 处理 BASE_URL（GitHub Pages 项目页 base 是 /blog）。
+ */
+import { Live2DKanban as Live2DKanbanReact } from "@/components/Live2DKanban";
+import { getAssetPath } from "@/utils/withBase";
+import config from "@/config";
+
+const kanban = config.features.kanban;
+const enabled = kanban?.enabled === true;
+const modelPath = enabled ? getAssetPath(kanban.modelPath.replace(/^\/+/, "")) : "";
+---
+
+{enabled && (
+  <div
+    id="live2d-kanban"
+    aria-hidden="true"
+    transition:persist="live2d-kanban"
+  >
+    <Live2DKanbanReact
+      client:only="react"
+      modelPath={modelPath}
+      width={kanban.width}
+      height={kanban.height}
+      scale={kanban.scale}
+      idleRandomAfterMs={kanban.idleRandomAfterMs}
+      followStrength={kanban.followStrength}
+      draggable={kanban.draggable}
+      hiddenStorageKey={kanban.hiddenStorageKey}
+    />
+  </div>
+)}

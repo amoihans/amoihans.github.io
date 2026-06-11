@@ -4,6 +4,7 @@ import {
   svgoOptimizer,
 } from "astro/config";
 import mdx from "@astrojs/mdx";
+import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { unified } from "@astrojs/markdown-remark";
 import remarkToc from "remark-toc";
@@ -21,6 +22,7 @@ export default defineConfig({
   site: config.site.url,
   integrations: [
     mdx(),
+    react(),
     sitemap({
       filter: page =>
         config.features?.showArchives !== false || !page.endsWith("/archives/"),
@@ -64,5 +66,14 @@ export default defineConfig({
   },
   experimental: {
     svgOptimizer: svgoOptimizer(),
+  },
+  vite: {
+    // React 19 的 react-dom/client 是 CJS 包，Vite 预打包有时会漏掉
+    // createRoot / hydrateRoot 的 ESM 命名导出（出现 "does not provide an
+    // export named 'createRoot'" + 一连串 504 Outdated Optimize Dep）。
+    // 强制 include 让 Vite 重新预打包并把 CJS 命名导出转成 ESM。
+    optimizeDeps: {
+      include: ["react-dom/client", "react-dom"],
+    },
   },
 });

@@ -33,6 +33,18 @@ const config: ResolvedAstroPaperConfig = {
     showBackButton: userConfig.features?.showBackButton ?? true,
     editPost: userConfig.features?.editPost ?? { enabled: false },
     search: userConfig.features?.search ?? "pagefind",
+    // 默认开启看板娘；用户可在 astro-paper.config.ts 改为 { enabled: false } 关闭
+    kanban: userConfig.features?.kanban ?? {
+      enabled: true,
+      modelPath: "/models/Hiyori/Hiyori.model3.json",
+      width: 420,
+      height: 600,
+      scale: 1,
+      idleRandomAfterMs: 8000,
+      followStrength: 1,
+      draggable: true,
+      hiddenStorageKey: "kanban:hidden",
+    },
   },
   socials: userConfig.socials ?? [],
   shareLinks: userConfig.shareLinks ?? [],

@@ -59,6 +59,33 @@ interface FeaturesConfig {
    * Set to false to disable search entirely.
    */
   search?: "pagefind" | false;
+  /**
+   * Live2D 看板娘配置。设为 false 关闭（用户不想被看板娘打扰时）。
+   * 启用后会在每个页面右下角显示 Hiyori 模型：眼睛跟随鼠标、
+   * 点击触发动作、空闲随机动作、可拖拽 / 隐藏。
+   * 模型资源位于 public/models/，由 <Live2DKanban> 加载。
+   */
+  kanban?:
+    | {
+        enabled: true;
+        /** 模型 .model3.json 的 URL（建议走 getAssetPath 处理 base） */
+        modelPath: string;
+        /** 画布宽度（px） */
+        width?: number;
+        /** 画布高度（px） */
+        height?: number;
+        /** 模型在画布中的缩放倍数 */
+        scale?: number;
+        /** 空闲多少毫秒后随机动作，0 关闭 */
+        idleRandomAfterMs?: number;
+        /** 鼠标跟踪强度 0~1 */
+        followStrength?: number;
+        /** 是否可拖拽 */
+        draggable?: boolean;
+        /** localStorage 中保存「用户已隐藏看板娘」状态的 key */
+        hiddenStorageKey?: string;
+      }
+    | { enabled: false };
 }
 
 interface SocialLink {
@@ -120,7 +147,9 @@ type ResolvedSiteConfig = Required<
 export interface ResolvedAstroPaperConfig {
   site: ResolvedSiteConfig;
   posts: Required<PostsConfig>;
-  features: Required<FeaturesConfig>;
+  features: Required<Omit<FeaturesConfig, "kanban">> & {
+    kanban: NonNullable<FeaturesConfig["kanban"]>;
+  };
   socials: SocialLink[];
   shareLinks: ShareLink[];
 }

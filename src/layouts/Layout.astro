@@ -3,6 +3,7 @@ import { ClientRouter } from "astro:transitions";
 import { getRelativeLocaleUrl } from "astro:i18n";
 import { resolveDefaultOgImagePath } from "@/utils/resolveDefaultOgImagePath";
 import { getAssetPath } from "@/utils/withBase";
+import Live2DKanban from "@/components/Live2DKanban.astro";
 import config from "@/config";
 import "@/styles/global.css";
 
@@ -109,6 +110,15 @@ const rssHref = getRelativeLocaleUrl(
     </script>
 
     <ClientRouter />
+
+    {/*
+      Live2D Cubism Core（官方 SDK 的 WebAssembly 前置 JS）。
+      必须在 pixi-live2d-display/cubism4 模块之前加载，
+      否则会抛 "Could not find Cubism 4 runtime" 错误。
+      用 is:inline 让 Astro 不要把它当 ESM 模块化打包。
+    */}
+    <script is:inline src={getAssetPath("cubismcore/live2dcubismcore.min.js")}
+    ></script>
   </head>
   <body
     class="bg-background font-app text-foreground selection:bg-accent/75 selection:text-accent-foreground flex min-h-svh flex-col"
@@ -117,5 +127,6 @@ const rssHref = getRelativeLocaleUrl(
     <script>
       import "@/scripts/theme";
     </script>
+    <Live2DKanban />
   </body>
 </html>

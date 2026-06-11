@@ -1,9 +1,17 @@
 import type { APIRoute } from "astro";
+import type { ReactNode } from "react";
 import satori from "satori";
 import sharp from "sharp";
 import { fontData, experimental_getFontFileURL } from "astro:assets";
 import { getFontPathByWeight } from "@/utils/getFontPathByWeight";
 import config from "@/config";
+
+/**
+ * satori 0.26 接收 ReactNode，但 @types/react@19 把裸 JSX-as-object 的类型
+ * 收窄为 ReactPortal/ReactElement 严格形式，satori 实际能跑（astro build 通过）。
+ * 这里抽一个小函数包一层：return `as ReactNode` 让 satori 节点作为参数返回。
+ */
+const satoriElement = (node: object): ReactNode => node as ReactNode;
 
 export const GET: APIRoute = async context => {
   if (!config.features.dynamicOgImage) {
@@ -27,20 +35,19 @@ export const GET: APIRoute = async context => {
     ),
   ]);
 
-  const svg = await satori(
-    {
-      type: "div",
-      props: {
-        style: {
-          background: "#fefbfb",
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Google Sans Code",
-        },
-        children: [
+  const element = satoriElement({
+    type: "div",
+    props: {
+      style: {
+        background: "#fefbfb",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "Google Sans Code",
+      },
+      children: [
           {
             type: "div",
             props: {
@@ -143,26 +150,27 @@ export const GET: APIRoute = async context => {
         ],
       },
     },
-    {
-      width: 1200,
-      height: 630,
-      embedFont: true,
-      fonts: [
-        {
-          name: "Google Sans Code",
-          data: regularData,
-          weight: 400,
-          style: "normal",
-        },
-        {
-          name: "Google Sans Code",
-          data: boldData,
-          weight: 700,
-          style: "normal",
-        },
-      ],
-    }
   );
+
+  const svg = await satori(element, {
+    width: 1200,
+    height: 630,
+    embedFont: true,
+    fonts: [
+      {
+        name: "Google Sans Code",
+        data: regularData,
+        weight: 400,
+        style: "normal",
+      },
+      {
+        name: "Google Sans Code",
+        data: boldData,
+        weight: 700,
+        style: "normal",
+      },
+    ],
+  });
 
   const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
 
