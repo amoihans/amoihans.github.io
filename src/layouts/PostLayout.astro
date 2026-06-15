@@ -276,6 +276,11 @@ const structuredData = {
             rx: 6px !important;
             ry: 6px !important;
           }
+          /* ── Mermaid 全屏查看按钮（hover 显示） ── */
+          .mermaid-container:focus-visible {
+            outline: 2px solid rgb(99 102 241);
+            outline-offset: 2px;
+          }
         `,
       });
 
@@ -288,8 +293,38 @@ const structuredData = {
           const { svg } = await mermaid.default.render(id, graphDefinition);
           const container = document.createElement("div");
           container.className =
-            "mermaid-container my-8 flex justify-center overflow-x-auto rounded-2xl border border-border/50 bg-card p-4 shadow-sm";
+            "mermaid-container group relative my-8 flex justify-center overflow-x-auto rounded-2xl border border-border/50 bg-card p-4 shadow-sm cursor-zoom-in";
+          container.title = "点击全屏查看";
           container.innerHTML = svg;
+
+          // ── 添加"全屏"按钮（hover 时浮现） ─────────────
+          const fsBtn = document.createElement("button");
+          fsBtn.type = "button";
+          fsBtn.className =
+            "mermaid-fs-btn absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-background/80 text-foreground/80 opacity-0 backdrop-blur transition-all hover:bg-background hover:text-foreground group-hover:opacity-100";
+          fsBtn.title = "全屏查看 (F)";
+          fsBtn.setAttribute("aria-label", "全屏查看此图表");
+          fsBtn.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+          fsBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openMermaidModal(svg, graphDefinition);
+          });
+          container.appendChild(fsBtn);
+
+          // ── 点击容器任意位置也进入全屏 ─────────────────
+          container.addEventListener("click", () => {
+            openMermaidModal(svg, graphDefinition);
+          });
+          // ── 键盘快捷键：聚焦后按 F 进入全屏 ───────────
+          container.tabIndex = 0;
+          container.addEventListener("keydown", (e) => {
+            if (e.key === "f" || e.key === "F") {
+              e.preventDefault();
+              openMermaidModal(svg, graphDefinition);
+            }
+          });
+
           pre.replaceWith(container);
         } catch (err) {
           console.warn("Mermaid render failed for diagram:", err);
@@ -302,4 +337,281 @@ const structuredData = {
 
   renderMermaidDiagrams();
   document.addEventListener("astro:after-swap", renderMermaidDiagrams);
+
+  // ─────────────────────────────────────────────────────
+  //  Mermaid 全屏查看 Modal（单例、惰性创建）
+  // ─────────────────────────────────────────────────────
+  let mermaidModal = null;
+  let mermaidModalState = { scale: 1, tx: 0, ty: 0, dragging: false };
+
+  function ensureMermaidModal() {
+    if (mermaidModal) return mermaidModal;
+    mermaidModal = document.createElement("div");
+    mermaidModal.id = "mermaid-modal";
+    mermaidModal.setAttribute("role", "dialog");
+    mermaidModal.setAttribute("aria-modal", "true");
+    mermaidModal.className =
+      "mermaid-modal fixed inset-0 z-50 hidden flex flex-col bg-background/95 backdrop-blur-sm";
+    mermaidModal.innerHTML = `
+      <div class="mermaid-modal-toolbar flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/90 px-3 py-2">
+        <div class="flex min-w-0 items-center gap-2 text-sm text-foreground/80">
+          <span class="i-lucide-diagram-2"></span>
+          <span class="mermaid-modal-title truncate">图表预览</span>
+        </div>
+        <div class="mermaid-modal-zoom flex shrink-0 items-center gap-1 text-sm">
+          <button type="button" data-action="zoom-out" class="mermaid-modal-btn" title="缩小 (-)">−</button>
+          <button type="button" data-action="zoom-reset" class="mermaid-modal-btn min-w-[3.5rem]" title="复位 (0)">100%</button>
+          <button type="button" data-action="zoom-in" class="mermaid-modal-btn" title="放大 (+)">+</button>
+          <span class="mx-1 hidden h-4 w-px bg-border sm:inline-block"></span>
+          <button type="button" data-action="toggle-source" class="mermaid-modal-btn" title="查看源码">{}</button>
+          <span class="mx-1 hidden h-4 w-px bg-border sm:inline-block"></span>
+          <button type="button" data-action="close" class="mermaid-modal-btn" title="关闭 (Esc)" aria-label="关闭">✕</button>
+        </div>
+      </div>
+      <div class="mermaid-modal-stage relative flex-1 overflow-hidden">
+        <div class="mermaid-modal-pane absolute inset-0 flex items-center justify-center overflow-auto p-4">
+          <div class="mermaid-modal-canvas inline-block origin-center"></div>
+        </div>
+        <pre class="mermaid-modal-source absolute inset-0 hidden overflow-auto bg-slate-950 p-4 text-xs leading-relaxed text-slate-100"><code></code></pre>
+      </div>
+      <div class="mermaid-modal-hint shrink-0 border-t border-border/60 bg-background/90 px-3 py-1.5 text-center text-xs text-foreground/60">
+        <span class="hidden sm:inline">滚轮缩放 · 拖动平移 · </span>Esc 关闭
+      </div>
+    `;
+    document.body.appendChild(mermaidModal);
+
+    // ── 按钮事件 ─────────────────────────────────────
+    mermaidModal
+      .querySelector('[data-action="close"]')
+      .addEventListener("click", closeMermaidModal);
+    mermaidModal
+      .querySelector('[data-action="zoom-in"]')
+      .addEventListener("click", () => zoomModal(1.2));
+    mermaidModal
+      .querySelector('[data-action="zoom-out"]')
+      .addEventListener("click", () => zoomModal(1 / 1.2));
+    mermaidModal
+      .querySelector('[data-action="zoom-reset"]')
+      .addEventListener("click", () => resetModal());
+    mermaidModal
+      .querySelector('[data-action="toggle-source"]')
+      .addEventListener("click", toggleMermaidSource);
+
+    // ── 滚轮缩放（Ctrl/Cmd + 滚轮 或 双指捏合） ──────
+    const pane = mermaidModal.querySelector(".mermaid-modal-pane");
+    pane.addEventListener(
+      "wheel",
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) < 50) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        zoomModal(factor, e.clientX, e.clientY);
+      },
+      { passive: false }
+    );
+
+    // ── 拖动平移 ─────────────────────────────────────
+    let dragState = null;
+    pane.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest("button")) return;
+      dragState = {
+        startX: e.clientX,
+        startY: e.clientY,
+        tx: mermaidModalState.tx,
+        ty: mermaidModalState.ty,
+      };
+      pane.setPointerCapture(e.pointerId);
+      pane.style.cursor = "grabbing";
+    });
+    pane.addEventListener("pointermove", (e) => {
+      if (!dragState) return;
+      mermaidModalState.tx = dragState.tx + (e.clientX - dragState.startX);
+      mermaidModalState.ty = dragState.ty + (e.clientY - dragState.startY);
+      applyModalTransform();
+    });
+    pane.addEventListener("pointerup", (e) => {
+      if (!dragState) return;
+      pane.releasePointerCapture(e.pointerId);
+      pane.style.cursor = "";
+      dragState = null;
+    });
+    pane.addEventListener("pointercancel", () => {
+      dragState = null;
+      pane.style.cursor = "";
+    });
+
+    return mermaidModal;
+  }
+
+  function openMermaidModal(svgString, sourceCode) {
+    const modal = ensureMermaidModal();
+    const canvas = modal.querySelector(".mermaid-modal-canvas");
+    const sourceEl = modal.querySelector(".mermaid-modal-source code");
+    canvas.innerHTML = svgString;
+    sourceEl.textContent = sourceCode || "";
+
+    // 复位 transform
+    mermaidModalState = { scale: 1, tx: 0, ty: 0, dragging: false };
+    applyModalTransform();
+
+    // 显示
+    modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+
+    // 自动 fit 到视口（仅首次）
+    requestAnimationFrame(() => fitModalToViewport());
+  }
+
+  function closeMermaidModal() {
+    if (!mermaidModal) return;
+    mermaidModal.classList.add("hidden");
+    document.body.style.overflow = "";
+    // 把 source 视图也关掉，下次默认显示图表
+    const source = mermaidModal.querySelector(".mermaid-modal-source");
+    if (source) source.classList.add("hidden");
+    const pane = mermaidModal.querySelector(".mermaid-modal-pane");
+    if (pane) pane.classList.remove("hidden");
+    const btn = mermaidModal.querySelector('[data-action="toggle-source"]');
+    if (btn) btn.classList.remove("mermaid-modal-btn-active");
+  }
+
+  function applyModalTransform() {
+    const canvas = mermaidModal.querySelector(".mermaid-modal-canvas");
+    canvas.style.transform = `translate(${mermaidModalState.tx}px, ${mermaidModalState.ty}px) scale(${mermaidModalState.scale})`;
+    const label = mermaidModal.querySelector('[data-action="zoom-reset"]');
+    if (label)
+      label.textContent = Math.round(mermaidModalState.scale * 100) + "%";
+  }
+
+  function zoomModal(factor, originX, originY) {
+    const next = Math.min(8, Math.max(0.2, mermaidModalState.scale * factor));
+    if (next === mermaidModalState.scale) return;
+
+    // 围绕鼠标位置缩放
+    if (originX !== undefined && originY !== undefined) {
+      const pane = mermaidModal.querySelector(".mermaid-modal-pane");
+      const rect = pane.getBoundingClientRect();
+      const cx = rect.width / 2 - mermaidModalState.tx;
+      const cy = rect.height / 2 - mermaidModalState.ty;
+      const dx = originX - rect.left - cx;
+      const dy = originY - rect.top - cy;
+      const ratio = next / mermaidModalState.scale;
+      mermaidModalState.tx -= dx * (ratio - 1);
+      mermaidModalState.ty -= dy * (ratio - 1);
+    }
+    mermaidModalState.scale = next;
+    applyModalTransform();
+  }
+
+  function resetModal() {
+    mermaidModalState = { scale: 1, tx: 0, ty: 0, dragging: false };
+    applyModalTransform();
+  }
+
+  function fitModalToViewport() {
+    const svg = mermaidModal.querySelector(".mermaid-modal-canvas svg");
+    const pane = mermaidModal.querySelector(".mermaid-modal-pane");
+    if (!svg || !pane) return;
+    const svgRect = svg.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    if (svgRect.width === 0 || svgRect.height === 0) return;
+    const scaleX = (paneRect.width - 32) / svgRect.width;
+    const scaleY = (paneRect.height - 32) / svgRect.height;
+    const fit = Math.min(1, scaleX, scaleY);
+    if (fit < 1) {
+      mermaidModalState.scale = fit;
+      applyModalTransform();
+    }
+  }
+
+  function toggleMermaidSource() {
+    if (!mermaidModal) return;
+    const pane = mermaidModal.querySelector(".mermaid-modal-pane");
+    const source = mermaidModal.querySelector(".mermaid-modal-source");
+    const btn = mermaidModal.querySelector('[data-action="toggle-source"]');
+    const hidden = source.classList.toggle("hidden");
+    pane.classList.toggle("hidden", !hidden);
+    btn.classList.toggle("mermaid-modal-btn-active", !hidden);
+  }
+
+  // ── 全局快捷键：Esc 关闭、+/− 缩放、0 复位 ───────
+  document.addEventListener("keydown", (e) => {
+    if (!mermaidModal || mermaidModal.classList.contains("hidden")) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeMermaidModal();
+    } else if (e.key === "+" || e.key === "=") {
+      e.preventDefault();
+      zoomModal(1.2);
+    } else if (e.key === "-" || e.key === "_") {
+      e.preventDefault();
+      zoomModal(1 / 1.2);
+    } else if (e.key === "0") {
+      e.preventDefault();
+      resetModal();
+    }
+  });
 </script>
+
+<style>
+  /* ── Mermaid 全屏 Modal ─────────────────────────────── */
+  #mermaid-modal {
+    overscroll-behavior: contain;
+  }
+  #mermaid-modal .mermaid-modal-pane {
+    cursor: grab;
+    scrollbar-width: thin;
+  }
+  #mermaid-modal .mermaid-modal-canvas {
+    transition: transform 0.05s linear;
+    max-width: none;
+  }
+  #mermaid-modal .mermaid-modal-canvas svg {
+    max-width: none;
+    height: auto;
+  }
+  #mermaid-modal .mermaid-modal-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(var(--border) / 0.6);
+    background: rgb(var(--background) / 0.6);
+    color: rgb(var(--foreground) / 0.85);
+    font-size: 0.875rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+  #mermaid-modal .mermaid-modal-btn:hover {
+    background: rgb(var(--background));
+    color: rgb(var(--foreground));
+  }
+  #mermaid-modal .mermaid-modal-btn-active {
+    background: rgb(99 102 241);
+    color: white;
+    border-color: rgb(99 102 241);
+  }
+  #mermaid-modal .mermaid-modal-source {
+    font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    white-space: pre;
+  }
+  /* ── Mermaid 容器上的全屏按钮（hover 显示） ── */
+  .mermaid-container .mermaid-fs-btn {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .mermaid-container .mermaid-fs-btn:active {
+    transform: scale(0.92);
+  }
+  /* 移动端没有 hover，始终显示 */
+  @media (hover: none) {
+    .mermaid-container .mermaid-fs-btn {
+      opacity: 0.8;
+    }
+  }
+</style>
