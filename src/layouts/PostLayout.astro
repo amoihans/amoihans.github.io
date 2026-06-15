@@ -66,6 +66,51 @@ const structuredData = {
 </Layout>
 
 <script is:inline>
+  // 存储 Mermaid 主题 CSS，导出时把它内联进 SVG
+  // （否则 PNG/剪贴板会丢样式，因为 Mermaid 用 class 引用页面 CSS）
+  let mermaidThemeCSS = "";
+
+  // Mermaid 主题样式，集中维护一份
+  const MERMAID_THEME_CSS = `
+          /* ── border radius ── */
+          .node rect, .node circle, .node ellipse, .node polygon,
+          .cluster rect, .label foreignObject, .edgeLabel foreignObject {
+            rx: 8px !important;
+            ry: 8px !important;
+          }
+          /* ── thinner lines ── */
+          .edgePath .path, .flowchart-link, .messageLine0, .messageLine1 {
+            stroke-width: 1.5px !important;
+          }
+          .node rect, .node circle, .node ellipse, .node polygon {
+            stroke-width: 1.5px !important;
+          }
+          /* ── subtle shadow on nodes ── */
+          .node rect {
+            filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.06));
+          }
+          /* ── cluster / subgraph styling ── */
+          .cluster rect {
+            stroke-dasharray: 6 3;
+            stroke-width: 1px !important;
+          }
+          /* ── edge labels ── */
+          .edgeLabel span {
+            font-size: 12px;
+            letter-spacing: 0.01em;
+          }
+          /* ── sequence diagram actors ── */
+          .actor {
+            rx: 6px !important;
+            ry: 6px !important;
+          }
+          /* ── Mermaid 全屏查看按钮（hover 显示） ── */
+          .mermaid-container:focus-visible {
+            outline: 2px solid rgb(99 102 241);
+            outline-offset: 2px;
+          }
+        `;
+
   // Mermaid diagram client-side rendering
   async function renderMermaidDiagrams() {
     const mermaidPres = document.querySelectorAll(
@@ -243,46 +288,10 @@ const structuredData = {
               pieLegendTextColor: "#475569",
               pieStrokeColor: "#ffffff",
             },
-        themeCSS: `
-          /* ── border radius ── */
-          .node rect, .node circle, .node ellipse, .node polygon,
-          .cluster rect, .label foreignObject, .edgeLabel foreignObject {
-            rx: 8px !important;
-            ry: 8px !important;
-          }
-          /* ── thinner lines ── */
-          .edgePath .path, .flowchart-link, .messageLine0, .messageLine1 {
-            stroke-width: 1.5px !important;
-          }
-          .node rect, .node circle, .node ellipse, .node polygon {
-            stroke-width: 1.5px !important;
-          }
-          /* ── subtle shadow on nodes ── */
-          .node rect {
-            filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.06));
-          }
-          /* ── cluster / subgraph styling ── */
-          .cluster rect {
-            stroke-dasharray: 6 3;
-            stroke-width: 1px !important;
-          }
-          /* ── edge labels ── */
-          .edgeLabel span {
-            font-size: 12px;
-            letter-spacing: 0.01em;
-          }
-          /* ── sequence diagram actors ── */
-          .actor {
-            rx: 6px !important;
-            ry: 6px !important;
-          }
-          /* ── Mermaid 全屏查看按钮（hover 显示） ── */
-          .mermaid-container:focus-visible {
-            outline: 2px solid rgb(99 102 241);
-            outline-offset: 2px;
-          }
-        `,
+        themeCSS: MERMAID_THEME_CSS,
       });
+      // 存一份供导出 SVG 时内联用
+      mermaidThemeCSS = MERMAID_THEME_CSS;
 
       for (const pre of mermaidPres) {
         const code = pre.querySelector("code");
@@ -365,6 +374,10 @@ const structuredData = {
           <span class="mx-1 hidden h-4 w-px bg-border sm:inline-block"></span>
           <button type="button" data-action="toggle-source" class="mermaid-modal-btn" title="查看源码">{}</button>
           <span class="mx-1 hidden h-4 w-px bg-border sm:inline-block"></span>
+          <button type="button" data-action="export-svg" class="mermaid-modal-btn px-1.5" title="导出为 SVG" aria-label="导出为 SVG">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <span class="mx-1 hidden h-4 w-px bg-border sm:inline-block"></span>
           <button type="button" data-action="close" class="mermaid-modal-btn" title="关闭 (Esc)" aria-label="关闭">✕</button>
         </div>
       </div>
@@ -384,6 +397,13 @@ const structuredData = {
     mermaidModal
       .querySelector('[data-action="close"]')
       .addEventListener("click", closeMermaidModal);
+    // ── 导出按钮：直接导出 SVG ─────────────────────
+    mermaidModal
+      .querySelector('[data-action="export-svg"]')
+      .addEventListener("click", (e) => {
+        e.stopPropagation();
+        exportMermaidDiagram();
+      });
     mermaidModal
       .querySelector('[data-action="zoom-in"]')
       .addEventListener("click", () => zoomModal(1.2));
@@ -533,6 +553,153 @@ const structuredData = {
     const hidden = source.classList.toggle("hidden");
     pane.classList.toggle("hidden", !hidden);
     btn.classList.toggle("mermaid-modal-btn-active", !hidden);
+  }
+
+  // ─────────────────────────────────────────────
+  //  导出图表：PNG / SVG / 复制到剪贴板
+  // ─────────────────────────────────────────────
+  function getMermaidExportContext() {
+    const svg = mermaidModal?.querySelector(
+      ".mermaid-modal-canvas > svg"
+    );
+    if (!svg) return null;
+    const container = svg.closest(".mermaid-container");
+    const containers = document.querySelectorAll(".mermaid-container");
+    const index =
+      container && containers.length
+        ? Array.from(containers).indexOf(container) + 1
+        : 1;
+    const slugMatch = window.location.pathname.match(/\/posts\/([^/]+)/);
+    const slug = slugMatch ? slugMatch[1] : "mermaid";
+    return { svg, index, slug };
+  }
+
+  // 把 SVG 做成"干净副本"：
+  //  1) 补 xmlns / xmlns:xlink
+  //  2) 用 viewBox 算真实尺寸，太小就放大到至少 1200px 长边
+  //  3) 内联 mermaid 主题 CSS（关键！否则 PNG 是黑乎乎一片）
+  //  4) 补一个背景 rect，跟随当前主题
+  //  5) 解除当前画布上的 transform / inline style
+  function prepareSvgForExport(srcSvg) {
+    const clone = srcSvg.cloneNode(true);
+    // 解除当前 canvas 上的缩放/位移
+    clone.removeAttribute("style");
+    clone.removeAttribute("transform");
+
+    // 确保 xmlns
+    if (!clone.getAttribute("xmlns")) {
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    }
+    if (!clone.getAttribute("xmlns:xlink")) {
+      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    }
+
+    // ── 真实尺寸：优先 viewBox（这是 Mermaid 的逻辑坐标） ──
+    const viewBox = clone.getAttribute("viewBox");
+    let vbW = 0,
+      vbH = 0;
+    if (viewBox) {
+      const parts = viewBox.split(/[\s,]+/).map(parseFloat);
+      vbW = parts[2] || 0;
+      vbH = parts[3] || 0;
+    }
+    let width = vbW;
+    let height = vbH;
+    if (!width || !height) {
+      width = parseFloat(clone.getAttribute("width")) || 0;
+      height = parseFloat(clone.getAttribute("height")) || 0;
+    }
+    if (!width || !height) {
+      const rect = srcSvg.getBoundingClientRect();
+      width = width || rect.width || 800;
+      height = height || rect.height || 600;
+    }
+    // 最小尺寸：长边至少 1200px，避免导出后看着像缩略图
+    const MIN_LONG = 1200;
+    const long = Math.max(width, height);
+    if (long < MIN_LONG) {
+      const k = MIN_LONG / long;
+      width = Math.round(width * k);
+      height = Math.round(height * k);
+    }
+    // 保留 viewBox 让矢量缩放永远正确
+    if (!viewBox) {
+      clone.setAttribute("viewBox", `0 0 ${vbW || width} ${vbH || height}`);
+    }
+    clone.setAttribute("width", width);
+    clone.setAttribute("height", height);
+
+    // ── 内联主题 CSS（关键修复） ──
+    if (mermaidThemeCSS) {
+      const styleEl = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "style"
+      );
+      styleEl.setAttribute("type", "text/css");
+      // 用 CDATA 包裹，避免选择器被 XML 解析器误解
+      styleEl.textContent = `/* <![CDATA[ */\n${mermaidThemeCSS}\n/* ]]> */`;
+      // 插到第一个元素前（背景 rect 之后）
+      clone.insertBefore(styleEl, clone.firstChild);
+    }
+
+    // ── 补背景 rect（跟随当前主题） ──
+    const isDark = document.documentElement.dataset.theme === "dark";
+    const bg = isDark ? "#0f172a" : "#ffffff";
+    const bgRect = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+    bgRect.setAttribute("x", "0");
+    bgRect.setAttribute("y", "0");
+    bgRect.setAttribute("width", "100%");
+    bgRect.setAttribute("height", "100%");
+    bgRect.setAttribute("fill", bg);
+    clone.insertBefore(bgRect, clone.firstChild);
+
+    return { clone, width, height, bg };
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function flashExportButton(ok = true) {
+    const btn = mermaidModal?.querySelector('[data-action="export-svg"]');
+    if (!btn) return;
+    btn.style.color = ok ? "rgb(34 197 94)" : "rgb(239 68 68)";
+    setTimeout(() => {
+      btn.style.color = "";
+    }, 1200);
+  }
+
+  async function exportMermaidDiagram() {
+    const ctx = getMermaidExportContext();
+    if (!ctx) {
+      flashExportButton("无图表", false);
+      return;
+    }
+    const baseName = `${ctx.slug}-${String(ctx.index).padStart(2, "0")}`;
+
+    try {
+      const { clone } = prepareSvgForExport(ctx.svg);
+      const xml = new XMLSerializer().serializeToString(clone);
+      const blob = new Blob(
+        ['<?xml version="1.0" encoding="UTF-8"?>\n', xml],
+        { type: "image/svg+xml;charset=utf-8" }
+      );
+      triggerDownload(blob, `${baseName}.svg`);
+      flashExportButton(true);
+    } catch (err) {
+      console.warn("Mermaid export failed:", err);
+      flashExportButton("导出失败", false);
+    }
   }
 
   // ── 全局快捷键：Esc 关闭、+/− 缩放、0 复位 ───────
