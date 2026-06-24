@@ -11,7 +11,7 @@ description: "一些有趣的小游戏，摸鱼专属。"
 
 > ⚠️ 首次加载会下载约 38MB 的 WASM 文件，请耐心等待。
 
-[开始游戏](/games/pvz/index.html)
+[开始游戏](/games/pvz/PVZ.html)
 
 ---
 
