@@ -249,7 +249,7 @@ class MetadataService:
 sequenceDiagram
     autonumber
     participant FE  as Web (Datasets UI)
-    participant API as Console Controller<br/>(metadata.py)
+    participant API as Console Controller (metadata.py)
     participant SVC as MetadataService
     participant DB  as PostgreSQL
     participant RD  as Redis (lock)
@@ -346,25 +346,25 @@ flowchart TD
     B -- manual --> M[读 metadata_filtering_conditions]
     B -- automatic --> L[LLM 抽取 conditions<br/>_automatic_metadata_filter_func]
 
-    M --> P1[变量插值<br/>_replace_metadata_filter_value<br/>把 {{var}} 替换成 inputs]
-    P1 --> P2[遍历 conditions<br/>调用 process_metadata_filter_func]
+    M --> P1["变量插值<br/>_replace_metadata_filter_value<br/>把 {{var}} 替换成 inputs"]
+    P1 --> P2["遍历 conditions<br/>调用 process_metadata_filter_func"]
     L --> P2
 
-    P2 --> Q[process_metadata_filter_func<br/>按 comparison_operator 生成 SQLAlchemy filter]
+    P2 --> Q["process_metadata_filter_func<br/>按 comparison_operator 生成 SQLAlchemy filter"]
     Q --> R{所有 conditions 处理完?}
     R -- 否 --> P2
     R -- 是 --> S{logical_operator}
 
-    S -- and --> T[document_query = document_query.where(and_(*filters))]
-    S -- or --> T2[document_query = document_query.where(or_(*filters))]
+    S -- and --> T["document_query = document_query.where(and_(*filters))"]
+    S -- or --> T2["document_query = document_query.where(or_(*filters))"]
 
-    T --> U[SELECT documents WHERE dataset_id IN ... AND filters]
+    T --> U["SELECT documents WHERE dataset_id IN ... AND filters"]
     T2 --> U
 
-    U --> V[得到 document_ids 列表<br/>group by dataset_id]
-    V --> W[把 document_ids 传到<br/>RetrievalService.retrieve<br/>document_ids_filter=]
-    W --> X[向量 / 关键词 / 全文检索<br/>只在这些文档内查]
-    X --> Y[Top-K chunks + rerank]
+    U --> V["得到 document_ids 列表<br/>group by dataset_id"]
+    V --> W["把 document_ids 传到<br/>RetrievalService.retrieve<br/>document_ids_filter=..."]
+    W --> X["向量 / 关键词 / 全文检索<br/>只在这些文档内查"]
+    X --> Y["Top-K chunks + rerank"]
     Y --> OUTF[返回结果]
 ```
 
@@ -504,12 +504,12 @@ results = RetrievalService.retrieve(
 sequenceDiagram
     autonumber
     participant U  as User (Chatflow / Workflow / App)
-    participant WF as Workflow Engine<br/>(knowledge_retrieval node)
+    participant WF as Workflow Engine (knowledge_retrieval node)
     participant DR as DatasetRetrieval
     participant DB as PostgreSQL (documents)
     participant LLM as LLM (only in automatic)
     participant RS as RetrievalService
-    participant VS as Vector Store /<br/>Keyword Search
+    participant VS as Vector Store / Keyword Search
 
     U->>WF: 发送 query + inputs
     WF->>DR: knowledge_retrieval(... metadata_filtering_mode, conditions, inputs)
@@ -520,10 +520,10 @@ sequenceDiagram
         DR-->>WF: (None, None)
     else mode = "automatic"
         DR->>LLM: invoke_llm(prompt=query + 字段列表)
-        LLM-->>DR: [{name, condition, value}, ...]
+        LLM-->>DR: 解析出条件数组
         DR->>DR: process_metadata_filter_func -> filters[]
     else mode = "manual"
-        DR->>DR: _replace_metadata_filter_value(value, inputs)<br/>(替换 {{var}})
+        DR->>DR: _replace_metadata_filter_value(value, inputs)<br/>(替换占位符)
         DR->>DR: process_metadata_filter_func -> filters[]
     end
 
@@ -631,9 +631,12 @@ export type KnowledgeRetrievalNodeType = CommonNodeType & {
 
 ```mermaid
 flowchart LR
+    %% 跨层共享节点: 放在 subgraphs 之外以避免作用域问题
+    A4[(documents.doc_metadata)]
+
     subgraph "Schema 层"
         A1[admin 创建 metadata 字段] --> A2[(dataset_metadatas)]
-        A3[admin 启用 built-in 字段] --> A4[(documents.doc_metadata)]
+        A3[admin 启用 built-in 字段]
     end
 
     subgraph "数据层"
@@ -647,18 +650,20 @@ flowchart LR
     subgraph "检索层 (chatflow / workflow / hit test)"
         C1[Knowledge Retrieval 节点] --> C2{filtering_mode}
         C2 -- disabled --> C3[skip]
-        C2 -- manual --> C4[conditions + {{var}}]
+        C2 -- manual --> C4["conditions + {{var}} 占位符替换"]
         C2 -- automatic --> C5[LLM 抽 conditions]
-        C4 --> C6[process_metadata_filter_func<br/>转 SQLAlchemy filter]
+        C4 --> C6["process_metadata_filter_func<br/>转 SQLAlchemy filter"]
         C5 --> C6
-        C6 --> C7[SELECT documents<br/>AND/OR 拼接]
+        C6 --> C7["SELECT documents<br/>AND/OR 拼接"]
         A4 -. JSON 查询 .-> C7
         C7 --> C8[document_ids_filter]
-        C8 --> C9[RetrievalService.retrieve<br/>document_ids_filter=...]
-        C9 --> C10[Vector / Keyword Search<br/>filter=document_id IN ...]
+        C8 --> C9["RetrievalService.retrieve<br/>document_ids_filter=..."]
+        C9 --> C10["Vector / Keyword Search<br/>filter=document_id IN ..."]
         C10 --> C11[rerank + top_k]
-        C11 --> C12[返回 chunks + doc_metadata]
+        C11 --> C12["返回 chunks + doc_metadata"]
     end
+
+    A3 --> A4
 ```
 
 ---
@@ -938,9 +943,9 @@ def _replace_metadata_filter_value(self, text, inputs):
 ```mermaid
 flowchart LR
     A[用户 query] --> B[从 dataset_metadatas 取出字段白名单]
-    B --> C[拼装 prompt<br/>METADATA_FILTER_SYSTEM_PROMPT]
+    B --> C["拼装 prompt<br/>METADATA_FILTER_SYSTEM_PROMPT"]
     C --> D[LLM invoke]
-    D --> E[parse JSON<br/>解析出 [{name, condition, value}, ...]]
+    D --> E["parse JSON<br/>解析出条件数组 (name, condition, value)"]
     E --> F[走 process_metadata_filter_func 转 SQL]
     F --> G[同 manual 一样 SELECT documents]
 ```
@@ -993,20 +998,20 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     subgraph "Step 1: 文档级过滤 (在 PostgreSQL)"
-        D1[dataset_metadatas<br/>字段白名单] --> D2[process_metadata_filter_func<br/>操作符转 SQL]
-        D3[metadata_filtering_conditions<br/>manual / automatic] --> D2
-        D4[inputs 中 {{var}}] --> D2
-        D2 --> D5[SELECT documents<br/>AND / OR 拼装]
-        D5 --> D6[document_id 列表<br/>group by dataset_id]
+        D1[dataset_metadatas<br/>字段白名单] --> D2["process_metadata_filter_func<br/>操作符转 SQL"]
+        D3["metadata_filtering_conditions<br/>manual / automatic"] --> D2
+        D4["inputs 中 {{var}}"] --> D2
+        D2 --> D5["SELECT documents<br/>AND / OR 拼装"]
+        D5 --> D6["document_id 列表<br/>group by dataset_id"]
     end
 
     D6 -->|document_ids_filter| S1
 
     subgraph "Step 2: chunk 召回 (在 Vector / Keyword Store)"
-        S1[RetrievalService.retrieve<br/>document_ids_filter=document_ids] --> S2{retrieval_method}
-        S2 -- semantic --> S3[VectorStore.search<br/>filter=document_id IN ...]
-        S2 -- keyword --> S4[KeywordService.search<br/>filter=document_id IN ...]
-        S2 -- hybrid --> S5[HybridService.search<br/>filter=document_id IN ...]
+        S1["RetrievalService.retrieve<br/>document_ids_filter=document_ids"] --> S2{retrieval_method}
+        S2 -- semantic --> S3["VectorStore.search<br/>filter=document_id IN ..."]
+        S2 -- keyword --> S4["KeywordService.search<br/>filter=document_id IN ..."]
+        S2 -- hybrid --> S5["HybridService.search<br/>filter=document_id IN ..."]
         S3 --> S6[candidate chunks]
         S4 --> S6
         S5 --> S6
