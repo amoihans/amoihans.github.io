@@ -696,3 +696,329 @@ Chatflow / Workflow 节点
 ```
 
 至此，**Dify 关于 chunk metadata 管理和按 metadata 过滤**的设计、流程与时序完整呈现。
+
+---
+
+# 第二部分：按 Metadata 过滤 Chunk 的实现机制（深入版）
+
+本部分聚焦"按 metadata 过滤 chunk 是怎么实现的"，逐行拆解关键代码路径。完整调用栈：
+
+```
+Chatflow / Workflow 节点
+ └─ core/workflow/nodes/knowledge_retrieval/knowledge_retrieval_node.py
+     └─ core/rag/retrieval/dataset_retrieval.DatasetRetrieval
+         ├─ get_metadata_filter_condition(...)
+         │   ├─ _automatic_metadata_filter_func(...)            # automatic 模式
+         │   ├─ _replace_metadata_filter_value(...)             # {{var}} 替换
+         │   └─ process_metadata_filter_func(...)               # 操作符 → SQL
+         │       └─ SELECT documents WHERE doc_metadata[...]...
+         │
+         └─ single_retrieve / multiple_retrieve
+             └─ core/rag/datasource/retrieval_service.Retriever
+                 └─ retrieve(document_ids_filter=document_ids)
+                     └─ VectorStore / Keyword Search
+                         └─ 返回 chunks
+```
+
+---
+
+## 一、为什么是"两步"而不是"一步"
+
+Dify 的 chunk（`DocumentSegment`）本身**不携带 metadata 字段**（`api/models/dataset.py:843-1042`）—— 所有 metadata 都挂在父文档 `Document.doc_metadata`（`AdjustedJSON` 类型，带 GIN 索引 `document_metadata_idx`）。
+
+所以直接在向量召回时把 metadata 条件拼到 SQL 里，**等价于**：
+- 先用 JSON 操作符从 `documents` 拿出 `document_id` 列表；
+- 再在更小的 chunk 集合内做向量 / 关键词匹配。
+
+后者既能让 JSON 索引生效、又能避免在向量库侧做大量 chunk 比对。代码里就是按这个思路实现的。
+
+---
+
+## 二、主入口：`get_metadata_filter_condition`
+
+文件：`api/core/rag/retrieval/dataset_retrieval.py:1391-1479`
+
+```python
+def get_metadata_filter_condition(
+    self, session, dataset_ids, query, tenant_id, user_id,
+    metadata_filtering_mode,            # "disabled" | "automatic" | "manual"
+    metadata_model_config,
+    metadata_filtering_conditions,      # Pydantic MetadataFilteringCondition
+    inputs,                             # 工作流输入, 用于 {{var}} 替换
+):
+    # 1. 构造基础 document_query (只查 enabled + 已索引完成 + 未归档 的文档)
+    document_query = select(DatasetDocument).where(
+        DatasetDocument.dataset_id.in_(dataset_ids),
+        DatasetDocument.indexing_status == "completed",
+        DatasetDocument.enabled == True,
+        DatasetDocument.archived == False,
+    )
+    filters = []
+    metadata_condition = None
+
+    # 2. 按模式走不同分支
+    if metadata_filtering_mode == "disabled":
+        return None, None
+
+    elif metadata_filtering_mode == "automatic":
+        # LLM 抽条件
+        auto = self._automatic_metadata_filter_func(
+            session, dataset_ids, query, tenant_id, user_id, metadata_model_config
+        )
+        for sequence, f in enumerate(auto or []):
+            filters = self.process_metadata_filter_func(
+                sequence, f["condition"], f["metadata_name"], f["value"], filters
+            )
+        # 拼装 metadata_condition 用于日志 / 透传
+
+    elif metadata_filtering_mode == "manual":
+        if metadata_filtering_conditions:
+            for sequence, c in enumerate(metadata_filtering_conditions.conditions):
+                name, op, value = c.name, c.comparison_operator, c.value
+                # {{var}} 替换 (仅当 value 是字符串且操作符需要 value)
+                if value is not None and op not in ("empty", "not empty") and isinstance(value, str):
+                    value = self._replace_metadata_filter_value(value, inputs)
+                filters = self.process_metadata_filter_func(sequence, op, name, value, filters)
+
+    # 3. 把所有 filter 用 AND/OR 拼到主 query
+    if filters:
+        if metadata_filtering_conditions.logical_operator == "and":
+            document_query = document_query.where(and_(*filters))
+        else:
+            document_query = document_query.where(or_(*filters))
+
+    # 4. 查出 document_ids 并按 dataset_id 分组
+    documents = session.scalars(document_query).all()
+    metadata_filter_document_ids = defaultdict(list) if documents else None
+    for d in documents:
+        metadata_filter_document_ids[d.dataset_id].append(d.id)
+
+    return metadata_filter_document_ids, metadata_condition
+```
+
+返回值 `(metadata_filter_document_ids, metadata_condition)`：
+- `metadata_filter_document_ids: dict[dataset_id, list[document_id]]` —— 真正的过滤结果；
+- `metadata_condition` —— 用于日志 / 外部 KB 透传 / 后续 LLM 提示。
+
+---
+
+## 三、核心转换：`process_metadata_filter_func`
+
+文件：`api/core/rag/retrieval/dataset_retrieval.py:1557-1634`。这是**操作符 → SQLAlchemy 表达式**的转换器：
+
+```python
+@classmethod
+def process_metadata_filter_func(cls, sequence, condition, metadata_name, value, filters):
+    if value is None and condition not in ("empty", "not empty"):
+        return filters  # value 缺失且非空判断 -> 跳过
+
+    json_field = DatasetDocument.doc_metadata[metadata_name].as_string()  # 字符串路径
+    escaped = escape_like_pattern(str(value))                            # LIKE 通配符转义
+
+    match condition:
+        case "contains":          filters.append(json_field.like(f"%{escaped}%", escape="\\"))
+        case "not contains":      filters.append(json_field.notlike(f"%{escaped}%", escape="\\"))
+        case "start with":        filters.append(json_field.like(f"{escaped}%", escape="\\"))
+        case "end with":          filters.append(json_field.like(f"%{escaped}", escape="\\"))
+
+        case "is" | "=":
+            if isinstance(value, str):           filters.append(json_field == value)
+            elif isinstance(value, (int,float)): filters.append(DatasetDocument.doc_metadata[metadata_name].as_float() == value)
+
+        case "is not" | "≠":
+            if isinstance(value, str):           filters.append(json_field != value)
+            elif isinstance(value, (int,float)): filters.append(DatasetDocument.doc_metadata[metadata_name].as_float() != value)
+
+        case "empty":     filters.append(DatasetDocument.doc_metadata[metadata_name].is_(None))
+        case "not empty": filters.append(DatasetDocument.doc_metadata[metadata_name].isnot(None))
+
+        case "before" | "<": filters.append(DatasetDocument.doc_metadata[metadata_name].as_float() < value)
+        case "after"  | ">": filters.append(DatasetDocument.doc_metadata[metadata_name].as_float() > value)
+        case "≤" | "<=":      filters.append(DatasetDocument.doc_metadata[metadata_name].as_float() <= value)
+        case "≥" | ">=":      filters.append(DatasetDocument.doc_metadata[metadata_name].as_float() >= value)
+
+        case "in" | "not in":
+            value_list = (
+                [v.strip() for v in value.split(",") if v.strip()]
+                if isinstance(value, str)
+                else [str(v) for v in value if v is not None]
+            )
+            if not value_list:
+                # 空列表: in -> False, not in -> True
+                filters.append(literal(condition == "not in"))
+            else:
+                op = json_field.in_ if condition == "in" else json_field.notin_
+                filters.append(op(value_list))
+    return filters
+```
+
+**实现要点**：
+- 字符串操作走 `doc_metadata[name].as_string()` 配合 SQL `LIKE`，并对 `%`、`_`、`\` 转义防注入；
+- 数字 / 时间走 `doc_metadata[name].as_float()`（时间以 float(timestamp) 存储）；
+- `empty` / `not empty` 不需要 value；
+- `in` / `not in` 支持字符串逗号分隔或数组。
+
+---
+
+## 四、把 `document_ids_filter` 透传到向量检索
+
+`api/core/rag/retrieval/dataset_retrieval.py:670-720`（`single_retrieve`）：
+
+```python
+# 1. metadata 过滤
+metadata_filter_document_ids, _ = self.get_metadata_filter_condition(...)
+
+# 2. 对当前 selected_dataset, 取出它命中的 document_id
+document_ids_filter = None
+if metadata_filter_document_ids:
+    document_ids = metadata_filter_document_ids.get(selected_dataset.id, [])
+    if document_ids:
+        document_ids_filter = document_ids
+    else:
+        return []  # 该 dataset 没有任何文档满足 metadata, 跳过
+
+# 3. 把 document_ids_filter 传给 RetrievalService
+results = RetrievalService.retrieve(
+    retrieval_method=..., dataset_id=selected_dataset.id,
+    query=query, top_k=top_k, score_threshold=...,
+    reranking_model=..., reranking_mode=...,
+    weights=...,
+    document_ids_filter=document_ids_filter,    # ← 关键
+)
+```
+
+`RetrievalService.retrieve`（`api/core/rag/datasource/retrieval_service.py:199-230`）把 `document_ids_filter` 传给底层检索：
+
+```python
+class RetrievalService:
+    @classmethod
+    def retrieve(
+        cls, retrieval_method, dataset_id, query,
+        top_k=4, score_threshold=0.0,
+        reranking_model=None, reranking_mode="reranking_model",
+        weights=None, document_ids_filter=None,        # ← 新增
+    ):
+        ...
+        if retrieval_method == RetrievalMethod.SEMANTIC_SEARCH:
+            documents = VectorService.search_by_vector(...)
+        elif retrieval_method == RetrievalMethod.FULL_TEXT_SEARCH:
+            documents = KeywordService.search_by_keyword(...)
+        elif retrieval_method == RetrievalMethod.HYBRID_SEARCH:
+            documents = HybridService.hybrid_search(...)
+        ...
+```
+
+各 vector store 实现（`api/core/rag/datasource/vdb/*`）会把这个白名单**拼成 `filter={"document_id": {"$in": [...]}}`** 或 PostgreSQL `metadata->>'document_id' IN (...)` 之类的表达式，从而在向量召回阶段就把 chunk 候选集合限制在命中的文档子集内。
+
+---
+
+## 五、`{{var}}` 变量插值
+
+`api/core/rag/retrieval/dataset_retrieval.py:1481-1493`
+
+`manual` 模式下，条件里写 `department = {{user_dept}}`，运行时会用工作流输入替换：
+
+```python
+def _replace_metadata_filter_value(self, text, inputs):
+    if not inputs: return text
+    pattern = re.compile(r"\{\{(\w+)\}\}")
+    output = pattern.sub(lambda m: str(inputs.get(m.group(1), f"{{{{{m.group(1)}}}}}")), text)
+    output = re.sub(r"[\r\n\t]+", " ", output).strip()
+    return output
+```
+
+替换后再走 `process_metadata_filter_func`。**只对 string value 生效**，数字 / 列表不替换。
+
+---
+
+## 六、自动模式：LLM 抽条件
+
+`api/core/rag/retrieval/dataset_retrieval.py:1495-1555`，流程：
+
+```mermaid
+flowchart LR
+    A[用户 query] --> B[从 dataset_metadatas 取出字段白名单]
+    B --> C[拼装 prompt<br/>METADATA_FILTER_SYSTEM_PROMPT]
+    C --> D[LLM invoke]
+    D --> E[parse JSON<br/>解析出 [{name, condition, value}, ...]]
+    E --> F[走 process_metadata_filter_func 转 SQL]
+    F --> G[同 manual 一样 SELECT documents]
+```
+
+LLM 拿到的 prompt 会明确要求"只输出 JSON 数组，每条形如 `{"metadata_name": "...", "condition": "...", "value": "..."}`"，用 `parse_and_check_json_markdown` 防御解析。
+
+> 注意：**hit testing 不走 automatic**（`api/services/hit_testing_service.py:137` 写死 `mode="manual"`）；Chatflow/Workflow 的 `Knowledge Retrieval` 节点才允许用 automatic。
+
+---
+
+## 七、端到端时序（命中测试场景）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U  as User
+    participant HT  as HitTestingService
+    participant DR  as DatasetRetrieval
+    participant DB  as PostgreSQL
+    participant RS  as RetrievalService
+    participant VS  as Vector Store
+
+    U->>HT: 点击 "Hit Testing" 按钮, 提交 query
+    HT->>DR: get_metadata_filter_condition(mode="manual", conditions, inputs={})
+    DR->>DB: SELECT documents WHERE dataset_id IN ... AND (metadata filters)
+    DB-->>DR: document_id 列表
+    DR-->>HT: metadata_filter_document_ids
+    HT->>RS: retrieve(query, document_ids_filter=...)
+    RS->>VS: search(filter=document_id IN [...])
+    VS-->>RS: candidate chunks
+    RS-->>HT: rerank + score_threshold 后的 chunks
+    HT-->>U: 返回 chunks + doc_metadata
+```
+
+---
+
+## 八、设计权衡
+
+1. **粒度是文档级，不是 chunk 级**：性能更好（JSON 索引 + 小 chunk 集），但**没有 per-chunk 自定义 metadata**。如果以后想支持，需要在 `document_segments` 上加一列并在索引时从父文档复制。
+2. **过滤 vs 排序是分离的**：metadata 过滤只决定 `document_id` 白名单，不参与相似度排序；最终排序仍由向量打分 + rerank 决定。
+3. **空集语义**：当 `metadata_filter_document_ids[dataset.id] == []` 时，**直接 return []**，不会回退去全库搜，避免污染。
+4. **OR 优先级**：`logical_operator="or"` 用 `or_(*filters)`；空条件用 `metadata_filtering_conditions.logical_operator` 兜底。
+5. **安全**：`escape_like_pattern` 转义 LIKE 通配符 + `escape="\\"`；数字 / 时间走 `as_float()` 比较，避免类型混淆。
+6. **变量插值的 fallback**：`inputs.get(key, f"{{{{{key}}}}}")`，未匹配时**保留原样**而不是抛错（避免 LLM 节点误传）。
+
+---
+
+## 九、过滤链路的可视化（按数据集维度）
+
+```mermaid
+flowchart TB
+    subgraph "Step 1: 文档级过滤 (在 PostgreSQL)"
+        D1[dataset_metadatas<br/>字段白名单] --> D2[process_metadata_filter_func<br/>操作符转 SQL]
+        D3[metadata_filtering_conditions<br/>manual / automatic] --> D2
+        D4[inputs 中 {{var}}] --> D2
+        D2 --> D5[SELECT documents<br/>AND / OR 拼装]
+        D5 --> D6[document_id 列表<br/>group by dataset_id]
+    end
+
+    D6 -->|document_ids_filter| S1
+
+    subgraph "Step 2: chunk 召回 (在 Vector / Keyword Store)"
+        S1[RetrievalService.retrieve<br/>document_ids_filter=document_ids] --> S2{retrieval_method}
+        S2 -- semantic --> S3[VectorStore.search<br/>filter=document_id IN ...]
+        S2 -- keyword --> S4[KeywordService.search<br/>filter=document_id IN ...]
+        S2 -- hybrid --> S5[HybridService.search<br/>filter=document_id IN ...]
+        S3 --> S6[candidate chunks]
+        S4 --> S6
+        S5 --> S6
+    end
+
+    S6 --> R1[rerank + score_threshold]
+    R1 --> R2[Top-K chunks + doc_metadata]
+    R2 --> OUTF[返回给调用方]
+```
+
+---
+
+## 十、一句话总结
+
+> **`Document.doc_metadata` JSON 字段 + GIN 索引 + `process_metadata_filter_func` 操作符转 SQL 表达式 = 第一步拿到 `document_id` 白名单 → 透传给 `RetrievalService.retrieve(document_ids_filter=...)` = 第二步在白名单内召回 chunk。**
